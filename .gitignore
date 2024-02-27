@@ -1,0 +1,11 @@
+dataset/*
+preview/*
+models/*
+test/*
+rf_model/*
+.idea/*
+.venv/*
+class/*
+data/*
+
+

@@ -2,7 +2,7 @@ dataset/*
 preview/*
 models/*
 test/*
-rf_model/*
+models/*
 .idea/*
 .venv/*
 class/*

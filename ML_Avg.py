@@ -8,13 +8,10 @@ import csv
 import sklearn.utils
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.feature_extraction import FeatureHasher
-from sklearn.linear_model import Ridge, SGDClassifier, SGDRegressor
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression
 
 pd.set_option('display.max_columns', None)  # 显示所有列
 pd.set_option('display.max_rows', None)  # 显示所有列
@@ -36,7 +33,7 @@ def one_hot(column, len, df):
         dic[line[:-1]] = lst
         idx += 1
     other = [0] * len
-    # other[-1] = 1   # 如果没有出现过，则按0处理
+    other[-1] = 1
 
     df[column] = df[column].apply(lambda x: dic[x] if x in dic else other)
 
@@ -57,16 +54,16 @@ def user_data(path):
     types = {'phone_no_m': 'str',
              'city_name': 'str',
              'county_name': 'str',
-             'idcard_cnt': 'float32',
-             'arpu_201908': 'float32',
-             'arpu_201909': 'float32',
-             'arpu_201910': 'float32',
-             'arpu_201911': 'float32',
-             'arpu_201912': 'float32',
-             'arpu_202001': 'float32',
-             'arpu_202002': 'float32',
-             'arpu_202003': 'float32',
-             'label': 'float32'}
+             'idcard_cnt': 'float16',
+             'arpu_201908': 'float16',
+             'arpu_201909': 'float16',
+             'arpu_201910': 'float16',
+             'arpu_201911': 'float16',
+             'arpu_201912': 'float16',
+             'arpu_202001': 'float16',
+             'arpu_202002': 'float16',
+             'arpu_202003': 'float16',
+             'label': 'float16'}
 
     # 设置DataFrame类型
     df = df.astype(types)
@@ -78,13 +75,6 @@ def user_data(path):
                  var_name='arpu_origin', value_name='arpu'
                  )
     df = df.drop('arpu_origin', axis=1)
-
-    df.dropna(subset=['phone_no_m'], inplace=True)
-    df['city_name'].replace('nan', '', inplace=True)
-    df['county_name'].replace('nan', '', inplace=True)
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    df['idcard_cnt'].fillna(value=df['idcard_cnt'].mean(), inplace=True)
-    df['arpu'].fillna(value=df['arpu'].mean(), inplace=True)
 
     # 对字符数据做one-hot
     one_hot('city_name', 24, df)
@@ -104,6 +94,8 @@ def user_data(path):
     # 将label先删掉重新添加，以使其到DataFrame的最后一列
     label_df = df.pop('label')
     df = pd.concat([df, city_name_df, county_name_df, label_df], axis=1)
+    df.replace('nan', '', inplace=True)
+    df.dropna(inplace=True)
 
     x = df.iloc[:, :-1]
     y = df['label']
@@ -111,7 +103,6 @@ def user_data(path):
     x, y = sklearn.utils.shuffle(x, y)
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=0)
     print('User data loaded successfully!!')
-
     return x_train, x_test, y_train, y_test
 
     # # 将城市名存入文件
@@ -228,11 +219,9 @@ def voc_data(path):
     df['hour'] = df['start_datetime'].dt.hour.fillna(0).astype(np.float16)
     df.drop('start_datetime', axis=1, inplace=True)
 
-    # 处理空值
-    df.replace('nan', '', inplace=True)
-
-    # 处理opposite_no_m、city_name和county_name
     set_index('opposite_no_m', df)
+
+    # 处理city_name和county_name
     one_hot('city_name', 24, df)
     one_hot('county_name', 183, df)
 
@@ -252,13 +241,15 @@ def voc_data(path):
     label_df = df.pop('label')
     df = pd.concat([df, city_name_df, county_name_df, label_df], axis=1)
 
+    # 处理空值
+    df.replace('nan', '', inplace=True)
     # df.dropna(inplace=True)
     x = df.iloc[:, :-1]
     y = df['label'].astype(np.float16)
     # print(x.)
     # 划分训练集和测试集
     x, y = sklearn.utils.shuffle(x, y)
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=0)
 
     # # 将imei_m做哈希处理
     # hasher = FeatureHasher(n_features=200, input_type='string')
@@ -270,22 +261,24 @@ def voc_data(path):
     # df = pd.concat([hashed_features_df, df], axis=1)
     # print(df)
     # hashed_features_df.to_csv('imei_hash.csv')
-
+    '''
+        后续将训练集中所有诈骗电话的imei存到字典中，训练时只要碰到字典中的imei即判断为诈骗电话
+    '''
     print('Voc data loaded successfully!!')
     return x_train, x_test, y_train, y_test
 
 def user_train(x_train, x_test, y_train, y_test):
 
     # 创建随机森林分类器实例
-    clf = RandomForestClassifier(n_estimators=100, random_state=0, verbose=2, n_jobs=-1)
+    # clf = RandomForestClassifier(n_estimators=100, random_state=0, verbose=2, n_jobs=-1)
     # clf = knn = KNeighborsClassifier(n_neighbors=3)
-    # clf = GradientBoostingClassifier(n_estimators=128, learning_rate=0.2, max_depth=16, random_state=42)
+    clf = GradientBoostingClassifier(n_estimators=128, learning_rate=0.2, max_depth=16, random_state=42)
     # 训练模型
     clf.fit(x_train, y_train)
 
     # 预测测试集
     y_pred = clf.predict(x_test)
-    joblib.dump(clf, 'rf_model/user_crf.pkl')
+    joblib.dump(clf, 'models/user_crf.pkl')
     # 计算准确率
     accuracy = accuracy_score(y_test, y_pred)
     print(f"user模型准确率: {accuracy:.5f}")
@@ -293,7 +286,7 @@ def user_train(x_train, x_test, y_train, y_test):
 
 
 def app_train(x_train, x_test, y_train, y_test):
-    # # 对字符数据做Hash (内存不够，只能用自己实现的one-hot函数)
+    # # 对字符数据做Hash (内存不够，能用自己实现的one-hot函数实现)
     # hasher = FeatureHasher(n_features=500)
     # data_to_hash = [{'busi_name': val} for val in df['busi_name']]
     # hashed_features = hasher.fit_transform(data_to_hash)
@@ -306,42 +299,26 @@ def app_train(x_train, x_test, y_train, y_test):
     # x = df.iloc[:, :-1].to_numpy()
     # y = df.iloc[:, -1].to_numpy()
 
-    # 标准化
-    scaler = StandardScaler()
-    x_train = scaler.fit_transform(x_train)
-    x_test = scaler.fit_transform(x_test)
-
-    # 创建分类器实例
-    # clf = RandomForestClassifier(n_estimators=8, random_state=0, verbose=2, n_jobs=-1)
-    # clf = SVC(kernel='linear')
-    # clf = KNeighborsClassifier(n_neighbors=8)
-    clf = SGDClassifier(max_iter=1000, tol=1e-3, penalty='l2', eta0=0.1, verbose=1)
-
-    # 训练模型
-    clf.fit(x_train, y_train)
-    # 预测测试集
-    y_pred = clf.predict(x_test)
-    y_pred = np.where(y_pred < 0.5, 0, 1)
-    # 计算准确率
-    accuracy = accuracy_score(y_test, y_pred)
-    print(f"app模型准确率: {accuracy:.5f}")
-    joblib.dump(clf, 'rf_model/app_crf.pkl')
-    return clf, y_pred
-
-
-def sms_train(x_train, x_test, y_train, y_test):
-    # 标准化
-    scaler = StandardScaler()
-    x_train = scaler.fit_transform(x_train)
-    x_test = scaler.fit_transform(x_test)
-
     # 创建分类器实例
     # clf = RandomForestClassifier(n_estimators=8, random_state=0, verbose=2, n_jobs=-1)
     # clf = SVC(kernel='linear')
     clf = KNeighborsClassifier(n_neighbors=8)
+    # 训练模型
+    clf.fit(x_train, y_train)
+    # 预测测试集
+    y_pred = clf.predict(x_test)
+    # 计算准确率
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"app模型准确率: {accuracy:.5f}")
+    joblib.dump(clf, 'models/app_crf.pkl')
+    return clf, y_pred
 
-    # clf = SGDClassifier(max_iter=1000, tol=0, penalty='l2', eta0=10000, verbose=1)
 
+def sms_train(x_train, x_test, y_train, y_test):
+
+    # 创建随机森林分类器实例
+    # clf = RandomForestClassifier(n_estimators=8, random_state=0, verbose=2, n_jobs=-1)
+    clf = KNeighborsClassifier(n_neighbors=8)
     # 训练模型
     clf.fit(x_train, y_train)
     # 预测测试集
@@ -349,25 +326,29 @@ def sms_train(x_train, x_test, y_train, y_test):
     # 计算准确率
     accuracy = accuracy_score(y_test, y_pred)
     print(f"sms模型准确率: {accuracy:.5f}")
-    joblib.dump(clf, 'rf_model/sms_crf.pkl')
+    joblib.dump(clf, 'models/sms_crf.pkl')
     return clf, y_pred
 
 
 def voc_train(x_train, x_test, y_train, y_test):
+    # 训练阶段忽略imei
+    X_train = x_train.drop('imei_m', axis=1)
+    X_test = x_test.drop('imei_m', axis=1)
 
     # 创建随机森林分类器实例
     clf = RandomForestClassifier(n_estimators=8, random_state=0, verbose=2, n_jobs=-1)
     # clf = SVC(verbose=True)
+    # clf = joblib.load('rf_model/voc_crf.pkl')
     # 训练模型
-    clf.fit(x_train, y_train)
+    clf.fit(X_train, y_train)
 
     # 预测测试集
-    y_pred = clf.predict(x_test)
+    y_pred = clf.predict(X_test)
 
     # 计算准确率
     accuracy = accuracy_score(y_test, y_pred)
     print(f"voc模型准确率: {accuracy:.6f}")
-    joblib.dump(clf, 'rf_model/voc_crf.pkl')
+    joblib.dump(clf, 'models/voc_crf.pkl')
     return clf, y_pred
 
 # def model_test(model, x_test, y_test):
@@ -398,7 +379,7 @@ def model_test(model, x_test, y):
             dic[phone].append(y[i])
     for key in dic:
         avg = sum(dic[key]) / len(dic[key])
-        dic[key] = 1 if avg > 0.6 else 0
+        dic[key] = avg
     return dic
 
 
@@ -406,199 +387,153 @@ def model_test(model, x_test, y):
 user_x_train, user_x_test, user_y_train, user_y_test = user_data('dataset/train/train_user.csv')
 app_x_train, app_x_test, app_y_train, app_y_test = app_data('dataset/train/train_app.csv')
 sms_x_train, sms_x_test, sms_y_train, sms_y_test = sms_data('dataset/train/train_sms.csv')
-# voc_x_train, voc_x_test, voc_y_train, voc_y_test = voc_data('dataset/train/voc.csv')
+voc_x_train, voc_x_test, voc_y_train, voc_y_test = voc_data('dataset/train/voc.csv')
 
 
-# def test():
-#     # 加载模型
-#     user_model, app_model, sms_model, voc_model = load_models('rf_model')
-#
-#     user_y = user_model.predict(user_x_test.iloc[:, 1:])
-#     app_y = app_model.predict(app_x_test.iloc[:, 1:])
-#     sms_y = sms_model.predict(sms_x_test.iloc[:, 1:])
-#     voc_y = voc_model.predict(voc_x_test.iloc[:, 1:])
-#
-#     user_dic = model_test(user_model, user_x_test, user_y)
-#     app_dic = model_test(app_model, app_x_test, app_y)
-#     sms_dic = model_test(sms_model, sms_x_test, sms_y)
-#     voc_dic = model_test(voc_model, voc_x_test, voc_y)
-#
-#     # 临时
-#     import json
-#     with open('user_dic.json', 'w') as file:
-#         json.dump(user_dic, file, indent=4)
-#     with open('app_dic.json', 'w') as file:
-#         json.dump(app_dic, file, indent=4)
-#     with open('sms_dic.json', 'w') as file:
-#         json.dump(sms_dic, file, indent=4)
-#     with open('voc_dic.json', 'w') as file:
-#         json.dump(voc_dic, file, indent=4)
-#     #####
-#
-#     print(len(user_dic), len(user_dic), len(user_dic), len(user_dic))
-#
-#     '''
-#         合并思想：根据模型正确率user 91.7%, app 81%, sms 78%, voc 71%
-#         1. 先将几个表中出现的所有user合并到同一个集合中
-#         2. user正确率最高，所以如果user有预测值就取user的值
-#         3. 如果某个用户在user的预测结果中没有出现，判断其他三个模型
-#     '''
-#
-#     dic_final = {}  # 保存每个用户最终的预测结果
-#     all_users = set(user_dic.keys()) | set(app_dic.keys()) | set(sms_dic.keys()) | set(voc_dic.keys())
-#     print(len(all_users))
-#     for user in all_users:
-#         empty_cnt = 0
-#         posi = 0
-#         nega = 0
-#         if user in app_dic:
-#             if app_dic[user] == 1:
-#                 posi += 1
-#             else:
-#                 nega += 1
-#         if user in sms_dic:
-#             if sms_dic[user] == 1:
-#                 posi += 1
-#             else:
-#                 nega += 1
-#         if user in voc_dic:
-#             if voc_dic[user] == 1:
-#                 posi += 1
-#             else:
-#                 nega += 1
-#
-#         # 如果user之外的三个模型的预测结果相同，则将最终结果设置为此结果，否则取user模型的结果做为最终结果
-#         if user in user_dic:
-#             # if posi == 3:
-#             #     dic_final[user] = 1
-#             # elif nega == 3:
-#             #     dic_final[user] = 0
-#             # else:
-#             dic_final[user] = user_dic[user]
-#         # 如果不在user表中，则判断预测为正样本的个数是否大于2
-#         else:
-#             if posi >= 2:
-#                 dic_final[user] = 1
-#             else:
-#                 dic_final[user] = 0
-#
-#     # 统计所有的用户的label，不要重复的数据
-#     label_dic = {}
-#     for i in range(len(user_x_test)):
-#         phone = user_x_test.iloc[i, 0]
-#         if phone not in label_dic:
-#             label_dic[phone] = user_y_test.iloc[i]
-#     for i in range(len(app_x_test)):
-#         phone = app_x_test.iloc[i, 0]
-#         if phone not in label_dic:
-#             label_dic[phone] = app_y_test.iloc[i]
-#     for i in range(len(sms_x_test)):
-#         phone = sms_x_test.iloc[i, 0]
-#         if phone not in label_dic:
-#             label_dic[phone] = sms_y_test.iloc[i]
-#     for i in range(len(voc_x_test)):
-#         phone = voc_x_test.iloc[i, 0]
-#         if phone not in label_dic:
-#             label_dic[phone] = voc_y_test.iloc[i]
-#
-#     # 最后的测试
-#     correct_cnt = 0
-#     for phone in dic_final:
-#         if dic_final[phone] == label_dic[phone]:
-#             correct_cnt += 1
-#
-#     print(correct_cnt / len(dic_final))
-#
-# '''
-# def test():
-#     # 临时
-#     import json
-#     with open('user_dic.json', 'r') as file:
-#         user_dic = json.load(file)
-#     with open('app_dic.json', 'r') as file:
-#         app_dic = json.load(file)
-#     with open('sms_dic.json', 'r') as file:
-#         sms_dic = json.load(file)
-#     with open('voc_dic.json', 'r') as file:
-#         voc_dic = json.load(file)
-#     #####
-#
-#     print(len(user_dic), len(user_dic), len(user_dic), len(user_dic))
-#
-#
-#
-#     dic_final = {}  # 保存每个用户最终的预测结果
-#     all_users = set(user_dic.keys()) | set(app_dic.keys()) | set(sms_dic.keys()) | set(voc_dic.keys())
-#     print(len(all_users))
-#     for user in all_users:
-#         empty_cnt = 0
-#         posi = 0
-#         nega = 0
-#         if user in app_dic:
-#             if app_dic[user] == 1:
-#                 posi += 1
-#             else:
-#                 nega += 1
-#         if user in sms_dic:
-#             if sms_dic[user] == 1:
-#                 posi += 1
-#             else:
-#                 nega += 1
-#         if user in voc_dic:
-#             if voc_dic[user] == 1:
-#                 posi += 1
-#             else:
-#                 nega += 1
-#
-#         # 如果user之外的三个模型的预测结果相同，则将最终结果设置为此结果，否则取user模型的结果做为最终结果
-#         if user in user_dic:
-#             # if posi == 3:
-#             #     dic_final[user] = 1
-#             # elif nega == 3:
-#             #     dic_final[user] = 0
-#             # else:
-#             dic_final[user] = user_dic[user]
-#         # 如果不在user表中，则判断预测为正样本的个数是否大于2
-#         else:
-#             if posi >= 2:
-#                 dic_final[user] = 1
-#             else:
-#                 dic_final[user] = 0
-#
-#     # 统计所有的用户的label，不要重复的数据
-#     label_dic = {}
-#     for i in range(len(user_x_test)):
-#         phone = user_x_test.iloc[i, 0]
-#         if phone not in label_dic:
-#             label_dic[phone] = user_y_test.iloc[i]
-#     for i in range(len(app_x_test)):
-#         phone = app_x_test.iloc[i, 0]
-#         if phone not in label_dic:
-#             label_dic[phone] = app_y_test.iloc[i]
-#     for i in range(len(sms_x_test)):
-#         phone = sms_x_test.iloc[i, 0]
-#         if phone not in label_dic:
-#             label_dic[phone] = sms_y_test.iloc[i]
-#     for i in range(len(voc_x_test)):
-#         phone = voc_x_test.iloc[i, 0]
-#         if phone not in label_dic:
-#             label_dic[phone] = voc_y_test.iloc[i]
-#
-#     # 最后的测试
-#     correct_cnt = 0
-#     for phone in dic_final:
-#         if dic_final[phone] == label_dic[phone]:
-#             correct_cnt += 1
-#
-#     print(correct_cnt / len(dic_final))
-# '''
+def test0():
+    # 加载模型
+    user_model, app_model, sms_model, voc_model = load_models('models')
+
+    user_y = user_model.predict(user_x_test.iloc[:, 1:])
+    app_y = app_model.predict(app_x_test.iloc[:, 1:])
+    sms_y = sms_model.predict(sms_x_test.iloc[:, 1:])
+    voc_y = voc_model.predict(voc_x_test.iloc[:, 1:])
+
+    user_dic = model_test(user_model, user_x_test, user_y)
+    app_dic = model_test(app_model, app_x_test, app_y)
+    sms_dic = model_test(sms_model, sms_x_test, sms_y)
+    voc_dic = model_test(voc_model, voc_x_test, voc_y)
+
+    # 临时
+    import json
+    with open('avg_user_dic.json', 'w') as file:
+        json.dump(user_dic, file, indent=4)
+    with open('avg_app_dic.json', 'w') as file:
+        json.dump(app_dic, file, indent=4)
+    with open('avg_sms_dic.json', 'w') as file:
+        json.dump(sms_dic, file, indent=4)
+    with open('avg_voc_dic.json', 'w') as file:
+        json.dump(voc_dic, file, indent=4)
+    #####
+
+    print(len(user_dic), len(user_dic), len(user_dic), len(user_dic))
+
+    '''
+        合并思想：根据模型正确率user 91.7%, app 81%, sms 78%, voc 71%
+        1. 先将几个表中出现的所有user合并到同一个集合中
+        2. user正确率最高，所以如果user有预测值就取user的值
+        3. 如果某个用户在user的预测结果中没有出现，判断其他三个模型
+    '''
+
+    dic_final = {}  # 保存每个用户最终的预测结果
+    all_users = set(user_dic.keys()) | set(app_dic.keys()) | set(sms_dic.keys()) | set(voc_dic.keys())
+    print(len(all_users))
+    for user in all_users:
+        scores = []
+        if user in user_dic:
+            scores.append(user_dic[user])
+        if user in app_dic:
+            scores.append(app_dic[user])
+        if user in sms_dic:
+            scores.append(sms_dic[user])
+        if user in voc_dic:
+            scores.append(voc_dic[user])
+        avg = sum(scores) / len(scores)
+        avg = 1 if avg > 0.5 else 0
+        dic_final[user] = avg
+
+    # 统计所有的用户的label，不要重复的数据
+    label_dic = {}
+    for i in range(len(user_x_test)):
+        phone = user_x_test.iloc[i, 0]
+        if phone not in label_dic:
+            label_dic[phone] = user_y_test.iloc[i]
+    for i in range(len(app_x_test)):
+        phone = app_x_test.iloc[i, 0]
+        if phone not in label_dic:
+            label_dic[phone] = app_y_test.iloc[i]
+    for i in range(len(sms_x_test)):
+        phone = sms_x_test.iloc[i, 0]
+        if phone not in label_dic:
+            label_dic[phone] = sms_y_test.iloc[i]
+    for i in range(len(voc_x_test)):
+        phone = voc_x_test.iloc[i, 0]
+        if phone not in label_dic:
+            label_dic[phone] = voc_y_test.iloc[i]
+
+    # 最后的测试
+    correct_cnt = 0
+    for phone in dic_final:
+        if dic_final[phone] == label_dic[phone]:
+            correct_cnt += 1
+
+    print(correct_cnt / len(dic_final))
+
+def test():
+    # 临时
+    import json
+    with open('avg_user_dic.json', 'r') as file:
+        user_dic = json.load(file)
+    with open('avg_app_dic.json', 'r') as file:
+        app_dic = json.load(file)
+    with open('avg_sms_dic.json', 'r') as file:
+        sms_dic = json.load(file)
+    with open('avg_voc_dic.json', 'r') as file:
+        voc_dic = json.load(file)
+    #####
+
+    print(len(user_dic), len(user_dic), len(user_dic), len(user_dic))
+
+    dic_final = {}  # 保存每个用户最终的预测结果
+    all_users = set(user_dic.keys()) | set(app_dic.keys()) | set(sms_dic.keys()) | set(voc_dic.keys())
+    print(len(all_users))
+    for user in all_users:
+        scores = []
+        if user in user_dic:
+            scores.append(user_dic[user])
+        if user in app_dic:
+            scores.append(app_dic[user])
+        if user in sms_dic:
+            scores.append(sms_dic[user])
+        if user in voc_dic:
+            scores.append(voc_dic[user])
+        avg = sum(scores) / len(scores)
+        avg = 1 if avg > 0.5 else 0
+        dic_final[user] = avg
+
+    # 统计所有的用户的label，不要重复的数据
+    label_dic = {}
+    for i in range(len(user_x_test)):
+        phone = user_x_test.iloc[i, 0]
+        if phone not in label_dic:
+            label_dic[phone] = user_y_test.iloc[i]
+    for i in range(len(app_x_test)):
+        phone = app_x_test.iloc[i, 0]
+        if phone not in label_dic:
+            label_dic[phone] = app_y_test.iloc[i]
+    for i in range(len(sms_x_test)):
+        phone = sms_x_test.iloc[i, 0]
+        if phone not in label_dic:
+            label_dic[phone] = sms_y_test.iloc[i]
+    for i in range(len(voc_x_test)):
+        phone = voc_x_test.iloc[i, 0]
+        if phone not in label_dic:
+            label_dic[phone] = voc_y_test.iloc[i]
+
+    # 最后的测试
+    correct_cnt = 0
+    for phone in dic_final:
+        if dic_final[phone] == label_dic[phone]:
+            correct_cnt += 1
+
+    print(correct_cnt / len(dic_final))
 
 if __name__ == '__main__':
 
     # 模型训练
-    user_model, user_y = user_train(user_x_train.iloc[:, 1:], user_x_test.iloc[:, 1:], user_y_train, user_y_test)
-    app_model, app_y = app_train(app_x_train.iloc[:, 1:], app_x_test.iloc[:, 1:], app_y_train, app_y_test)
-    sms_model, sms_y = sms_train(sms_x_train.iloc[:, 1:], sms_x_test.iloc[:, 1:], sms_y_train, sms_y_test)
+    # user_model, user_y = user_train(user_x_train.iloc[:, 1:], user_x_test.iloc[:, 1:], user_y_train, user_y_test)
+    # app_model, app_y = app_train(app_x_train.iloc[:, 1:], app_x_test.iloc[:, 1:], app_y_train, app_y_test)
+    # sms_model, sms_y = sms_train(sms_x_train.iloc[:, 1:], sms_x_test.iloc[:, 1:], sms_y_train, sms_y_test)
     # voc_model, voc_y = voc_train(voc_x_train.iloc[:, 1:], voc_x_test.iloc[:, 1:], voc_y_train, voc_y_test)
-    # test()
+    test()
 

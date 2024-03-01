@@ -87,20 +87,6 @@ def user_data(path):
     print('User data loaded successfully!!')
     return df
 
-    # # 将城市名存入文件
-    # citys = set(df['county_name'].tolist())
-    # print('nan' in citys)
-    # file = open('class/county_name.txt', 'w', encoding='utf-8')
-    # file.write('\n')
-    # for city in citys:
-    #     file.write(city + '\n')
-    #
-    # # 从文件中读出城市名
-    # file = open('class/county_name.txt', 'r', encoding='utf-8')
-    # lst = []
-    # for line in file:
-    #     lst.append(line[:-1])
-
 
 def app_data(path):
     df = pd.read_csv(path)
@@ -127,22 +113,6 @@ def app_data(path):
 
     print('App data loaded successfully!!')
     return x
-
-    # # 将软件名存入文件
-    # citys = set(df['busi_name'].tolist())
-    # print('nan' in citys)
-    # file = open('class/busi_name.txt', 'w', encoding='utf-8')
-    # file.write('\n')
-    # for city in citys:
-    #     file.write(city + '\n')
-
-    # # 从文件中读出软件名
-    # file = open('class/busi_name.txt', 'r', encoding='utf-8')
-    # lst = []
-    # for line in file:
-    #     lst.append(line[:-1])
-    # print(lst)
-
 
 def sms_data(path):
     df = pd.read_csv(path)
@@ -216,6 +186,147 @@ def voc_data(path):
     print('Voc data loaded successfully!!')
     return df
 
+
+def user_data(path):
+    df = pd.read_csv(path)
+    types = {'phone_no_m': 'str',
+             'city_name': 'str',
+             'county_name': 'str',
+             'idcard_cnt': 'float32',
+             'arpu_202004': 'float32'
+             }
+
+    # 设置DataFrame类型
+    df = df.astype(types)
+
+
+    df.dropna(subset=['phone_no_m'], inplace=True)
+    df['city_name'].replace('nan', '', inplace=True)
+    df['county_name'].replace('nan', '', inplace=True)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df['idcard_cnt'].fillna(value=df['idcard_cnt'].mean(), inplace=True)
+    df['arpu_202004'].fillna(value=df['arpu_202004'].mean(), inplace=True)
+    df.rename(columns={'arpu_202004':'arpu'}, inplace=True)
+
+    # 对字符数据做one-hot
+    one_hot('city_name', 24, df)
+    one_hot('county_name', 183, df)
+
+    # 将city_name和county_name的one-hot vector拆成每个元素一列
+    city_name_np = np.array(df['city_name'].tolist())
+    new_columns = ['city_name' + str(i) for i in range(city_name_np.shape[1])]
+    city_name_df = pd.DataFrame(city_name_np, columns=new_columns, dtype=np.float16)
+
+    county_name_np = np.array(df['county_name'].tolist())
+    new_columns = ['county_name' + str(i) for i in range(county_name_np.shape[1])]
+    county_name_df = pd.DataFrame(county_name_np, columns=new_columns, dtype=np.float16)
+
+    # 删除掉原来的'city_name', 'county_name'向量
+    df = df.drop(['city_name', 'county_name'], axis=1)
+    df = pd.concat([df, city_name_df, county_name_df], axis=1)
+    print('User data loaded successfully!!')
+    return df
+
+def app_data(path):
+    df = pd.read_csv(path)
+
+    types = {'phone_no_m': 'str',
+             'busi_name': 'str',
+             'flow': 'float32',
+             'month_id': 'str'
+             }
+
+    # 设置DataFrame类型
+    df = df.astype(types)
+    df['busi_name'] = df['busi_name'].replace('nan', '')
+    df['flow'] = df['flow'].fillna(0)
+    df['month_id'] = df['month_id'].fillna('').str.rstrip('\r')
+    df['month_id'] = pd.to_datetime(df['month_id'], format='%Y-%m')
+    df['year'] = df['month_id'].dt.year.fillna(0).astype(np.float16)
+    df['month'] = df['month_id'].dt.month.fillna(0).astype(np.float16)
+
+    # 对字符数据做序列化
+    set_index('busi_name', df)
+    # 将输入的所有数据合并成一个列表
+    df = df[['phone_no_m', 'busi_name', 'flow', 'year', 'month']]
+
+    print('App data loaded successfully!!')
+    return df
+
+
+def sms_data(path):
+    df = pd.read_csv(path)
+    types = {'phone_no_m': 'str',
+             'opposite_no_m': 'str',
+             'calltype_id': 'float16',
+             'request_datetime': 'str'
+             }
+    # 设置DataFrame类型
+    df = df.astype(types)
+    df['calltype_id'] = df['calltype_id'].fillna(0)
+    df['request_datetime'] = df['request_datetime'].fillna('')
+    df['request_datetime'] = pd.to_datetime(df['request_datetime'])
+    df['year'] = df['request_datetime'].dt.year.fillna(0)
+    df['month'] = df['request_datetime'].dt.month.fillna(0)
+    df['day'] = df['request_datetime'].dt.day.fillna(0)
+    df['hour'] = df['request_datetime'].dt.hour.fillna(0)
+    # df['label'] = df['label'].dropna()
+    df = df[['phone_no_m', 'calltype_id', 'year', 'month', 'day', 'hour']]
+    print('Sms data loaded successfully!!')
+    return df
+
+
+def voc_data(path):
+    df = pd.read_csv(path)
+    types = {'phone_no_m': 'str',
+             'opposite_no_m': 'str',
+             'calltype_id': 'short',
+             'start_datetime': 'str',
+             'call_dur': 'float16',
+             'city_name': 'str',
+             'county_name': 'str',
+             'imei_m': 'str'
+             }
+    # 设置DataFrame类型
+    df = df.astype(types)
+    # print(df.dtypes)
+
+    # 处理日期类型
+    df['start_datetime'] = df['start_datetime'].fillna('')
+    df['start_datetime'] = pd.to_datetime(df['start_datetime'])
+    df['year'] = df['start_datetime'].dt.year.fillna(0).astype(np.float16)
+    df['month'] = df['start_datetime'].dt.month.fillna(0).astype(np.float16)
+    df['day'] = df['start_datetime'].dt.day.fillna(0).astype(np.float16)
+    df['hour'] = df['start_datetime'].dt.hour.fillna(0).astype(np.float16)
+    df.drop('start_datetime', axis=1, inplace=True)
+
+    # 处理空值
+    df.replace('nan', '', inplace=True)
+
+    # 处理opposite_no_m、city_name和county_name
+    set_index('opposite_no_m', df)
+    one_hot('city_name', 24, df)
+    one_hot('county_name', 183, df)
+
+    # 将city_name和county_name的one-hot vector拆成每个元素一列
+    city_name_np = np.array(df['city_name'].tolist())
+    new_columns = ['city_name' + str(i) for i in range(city_name_np.shape[1])]
+    city_name_df = pd.DataFrame(city_name_np, columns=new_columns)
+
+    county_name_np = np.array(df['county_name'].tolist())
+    new_columns = ['county_name' + str(i) for i in range(county_name_np.shape[1])]
+    county_name_df = pd.DataFrame(county_name_np, columns=new_columns)
+
+    # 删除掉原来的'city_name', 'county_name'向量
+    df = df.drop(['city_name', 'county_name', 'imei_m'], axis=1)
+
+    df = pd.concat([df, city_name_df, county_name_df], axis=1)
+
+    print('Voc data loaded successfully!!')
+    return df
+
+
+
 def load_models(path):
     user_model = joblib.load(path + '/user_crf.pkl')
     print('User model loaded successfully!!')
@@ -254,7 +365,7 @@ voc_x_test = voc_data('dataset/test/test_voc.csv')
 
 def inference():
     # 加载模型
-    user_model, app_model, sms_model, voc_model = load_models('rf_model')
+    user_model, app_model, sms_model, voc_model = load_models('models')
 
     user_y = user_model.predict(user_x_test.iloc[:, 1:])
     app_y = app_model.predict(app_x_test.iloc[:, 1:])

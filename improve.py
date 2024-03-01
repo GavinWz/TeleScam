@@ -55,8 +55,9 @@ def set_index(column, df):
 def user_data(path):
     df = pd.read_csv(path)
 
+
     types = {'phone_no_m': 'str', 'city_name': 'str', 'county_name': 'str', 'idcard_cnt': 'float32',
-             'risk': 'float32', 'monthly_call_count': 'float32', 'daily_call_count': 'float32',
+             'arpu_avg': 'float32', 'monthly_call_count': 'float32', 'daily_call_count': 'float32',
              'calltype_01_ratio': 'float32', 'calltype_02_ratio': 'float32', 'calltype_03_ratio': 'float32',
              'call_dur_0-60_ratio': 'float32', 'call_dur_61-120_ratio': 'float32',
              'call_dur_121-180_ratio': 'float32', 'call_dur_181-240_ratio': 'float32',
@@ -66,12 +67,13 @@ def user_data(path):
              'broadcast_percentage': 'float32', 'app_times': 'float32', 'app1': 'str', 'app2': 'str',
              'app3': 'str', 'label': 'float32'
             }
+
     # 设置DataFrame类型
     df = df.astype(types)
 
     # 特征工程
     str_list = ['city_name', 'county_name', 'app1', 'app2', 'app3']
-    num_list = ['idcard_cnt', 'risk', 'monthly_call_count',
+    num_list = ['idcard_cnt', 'arpu_avg', 'monthly_call_count',
         'daily_call_count', 'calltype_01_ratio', 'calltype_02_ratio', 'calltype_03_ratio',
         'call_dur_0-60_ratio', 'call_dur_61-120_ratio', 'call_dur_121-180_ratio',
         'call_dur_181-240_ratio', 'call_dur_240+_ratio', 'active_days_per_month', 'monthly_city_switch_count',
@@ -140,29 +142,30 @@ def user_data(path):
 def app_data(path):
     df = pd.read_csv(path)
 
-    # phone_no_m, app_times, app1, app2, app3
+    # phone_no_m,app_times,app1,app2,app3,label
 
     types = {'phone_no_m': 'str',
-             'busi_name': 'str',
              'app_times': 'float32',
              'app1': 'str',
+             'app2': 'str',
+             'app3': 'str',
              'label': 'float16'
              }
 
     # 设置DataFrame类型
     df = df.astype(types)
-    df['busi_name'] = df['busi_name'].replace('nan', '')
-    df['flow'] = df['flow'].fillna(0)
-    df['month_id'] = df['month_id'].fillna('').str.rstrip('\r')
-    df['month_id'] = pd.to_datetime(df['month_id'], format='%Y-%m')
-    df['year'] = df['month_id'].dt.year.fillna(0).astype(np.float16)
-    df['month'] = df['month_id'].dt.month.fillna(0).astype(np.float16)
-    df['label'] = df['label'].dropna().astype(np.float16)
 
+    df.replace('nan', '', inplace=True)
+    df.dropna(subset='label', inplace=True)
+    df['app_times'].fillna(df['app_times'].mean(), inplace=True)
+
+    print(df.isnull().any())
     # 对字符数据做序列化
-    set_index('busi_name', df)
+    set_index('app1', df)
+    set_index('app2', df)
+    set_index('app3', df)
     # 将输入的所有数据合并成一个列表
-    x = df[['phone_no_m', 'busi_name', 'flow', 'year', 'month']]
+    x = df[['phone_no_m', 'app_times', 'app1', 'app2', 'app3']]
     y = df['label']
 
     # 划分训练集和测试集
@@ -288,14 +291,15 @@ def user_train(x_train, x_test, y_train, y_test):
 
     # 创建随机森林分类器实例
     clf = RandomForestClassifier(n_estimators=100, random_state=0, verbose=2, n_jobs=-1)
-    # clf = knn = KNeighborsClassifier(n_neighbors=3)
+    # clf = KNeighborsClassifier(n_neighbors=3)
+    # clf = SVC(kernel='linear')
     # clf = GradientBoostingClassifier(n_estimators=128, learning_rate=0.2, max_depth=16, random_state=42)
     # 训练模型
     clf.fit(x_train, y_train)
 
     # 预测测试集
     y_pred = clf.predict(x_test)
-    joblib.dump(clf, 'rf_model/user_crf.pkl')
+    joblib.dump(clf, 'models/user_crf.pkl')
     # 计算准确率
     accuracy = accuracy_score(y_test, y_pred)
     print(f"user模型准确率: {accuracy:.5f}")
@@ -335,7 +339,7 @@ def app_train(x_train, x_test, y_train, y_test):
     # 计算准确率
     accuracy = accuracy_score(y_test, y_pred)
     print(f"app模型准确率: {accuracy:.5f}")
-    joblib.dump(clf, 'rf_model/app_crf.pkl')
+    joblib.dump(clf, 'models/app_crf.pkl')
     return clf, y_pred
 
 
@@ -359,7 +363,7 @@ def sms_train(x_train, x_test, y_train, y_test):
     # 计算准确率
     accuracy = accuracy_score(y_test, y_pred)
     print(f"sms模型准确率: {accuracy:.5f}")
-    joblib.dump(clf, 'rf_model/sms_crf.pkl')
+    joblib.dump(clf, 'models/sms_crf.pkl')
     return clf, y_pred
 
 
@@ -377,7 +381,7 @@ def voc_train(x_train, x_test, y_train, y_test):
     # 计算准确率
     accuracy = accuracy_score(y_test, y_pred)
     print(f"voc模型准确率: {accuracy:.6f}")
-    joblib.dump(clf, 'rf_model/voc_crf.pkl')
+    joblib.dump(clf, 'models/voc_crf.pkl')
     return clf, y_pred
 
 # def model_test(model, x_test, y_test):
@@ -413,10 +417,10 @@ def model_test(model, x_test, y):
 
 
 # 加载数据
-user_x_train, user_x_test, user_y_train, user_y_test = user_data('data/train/merged_table.csv')
-# app_x_train, app_x_test, app_y_train, app_y_test = app_data('dataset/train/train_app.csv')
-# sms_x_train, sms_x_test, sms_y_train, sms_y_test = sms_data('dataset/train/train_sms.csv')
-# voc_x_train, voc_x_test, voc_y_train, voc_y_test = voc_data('dataset/train/voc.csv')
+# user_x_train, user_x_test, user_y_train, user_y_test = user_data('data/train/merged_table.csv')
+app_x_train, app_x_test, app_y_train, app_y_test = app_data('data/train/train_app1_sovled.csv')
+# sms_x_train, sms_x_test, sms_y_train, sms_y_test = sms_data('data/train/train_app1_sovled.csv')
+# voc_x_train, voc_x_test, voc_y_train, voc_y_test = voc_data('data/train/train_app1_sovled.csv')
 
 
 # def test():
@@ -606,8 +610,8 @@ user_x_train, user_x_test, user_y_train, user_y_test = user_data('data/train/mer
 if __name__ == '__main__':
 
     # 模型训练
-    user_model, user_y = user_train(user_x_train.iloc[:, 1:], user_x_test.iloc[:, 1:], user_y_train, user_y_test)
-    # app_model, app_y = app_train(app_x_train.iloc[:, 1:], app_x_test.iloc[:, 1:], app_y_train, app_y_test)
+    # user_model, user_y = user_train(user_x_train.iloc[:, 1:], user_x_test.iloc[:, 1:], user_y_train, user_y_test)
+    app_model, app_y = app_train(app_x_train.iloc[:, 1:], app_x_test.iloc[:, 1:], app_y_train, app_y_test)
     # sms_model, sms_y = sms_train(sms_x_train.iloc[:, 1:], sms_x_test.iloc[:, 1:], sms_y_train, sms_y_test)
     # voc_model, voc_y = voc_train(voc_x_train.iloc[:, 1:], voc_x_test.iloc[:, 1:], voc_y_train, voc_y_test)
     # test()
